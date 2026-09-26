@@ -7,32 +7,33 @@
 The spicy programming language.
 
 
-
-# Language Specification
-
-## Overview
-- **Paradigm:** Pretty much like rust.
-- **Goal / Purpose:** im still doing some self-discovery :D  
-- **Execution model:** transpiled into rust  
-- **Typing:** Static 
-
 ---
 
 
 ## Syntax (Grammar)
-```rs
+
+main block <br />
+```c
 run {
     const string name = "your_name";
     print(hello_world(name, 0));
 }
+```
+<br />
 
+```c
 // comment
 
 /*
 comment block
 */
 
-fn hello_world(name string, count int): list {
+```
+<br />
+
+functions <br />
+```c
+fn hello_world(name: string, count: int): () {
     list l = [];
     
     loop i -> count {
@@ -41,11 +42,60 @@ fn hello_world(name string, count int): list {
     
     return l
 }
+```
+<br />
 
-object Person {
-    Age: int,
-    Alive: bool,
+lists <br />
+```c
+// dynamic by default
+list l = []
+list_add(l, "a")
+// etc...
+```
+<br />
+
+struct <br />
+```c 
+struct Person {
+    age: int,
+    name: string.
 }
+
+person: Person = {age: 18, name: "name"}
+
+a = person.age
+
+```
+<br />
+
+maps <br />
+```c
+// each field is a list (dynamic array)
+map People {
+    age: int,
+    name: string,
+}
+
+people: People // initialized each list as empty
+
+people.age = some_list
+
+list_add(people.age, 18)
+
+```
+<br />
+
+other types <br />
+```
+u32, u64, i32, i63
+
+string
+
+id // index
+
+```
+
+
 
 ```
 
