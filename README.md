@@ -31,15 +31,23 @@ comment block
 ```
 <br />
 
+loops <br />
+```rs
+
+loop (i32: i = 0) < n {
+
+}
+
+loop (bool: on) == false {
+
+}
+```
+
+<br />
+
 functions <br />
 ```c
 fn hello_world(name: string, count: int): () {
-    list l = [];
-    
-    loop i -> count {
-        l.add(name)
-    };
-    
     return l
 }
 ```
@@ -68,6 +76,18 @@ a = person.age
 ```
 <br />
 
+enum <br />
+```c
+enum Nationality {
+    French,
+    NotFrench,
+}
+
+if n == Nationality::French {}
+
+```
+<br />
+
 maps <br />
 ```c
 // each field is a list (dynamic array)
@@ -86,7 +106,7 @@ list_add(people.age, 18)
 <br />
 
 other types <br />
-```
+```sh
 u32, u64, i32, i63
 
 string
@@ -94,41 +114,52 @@ string
 id // index
 
 ```
+<br />
 
+errors and return types <br />
+```c 
+// to define a constant (something like a global enum) that can be returned from any functions
 
+#return_type FileIO_Error
+
+fn write_file(): () {
+    // ...
+    if !error {
+        return
+    } else {
+        return FileIO_Error
+    }
+}
+// ps. all the return types are like a single big enum that belongs to the entire package or file (tbd)
 
 ```
+<br />
 
-## Error Handling
+boolean operations <br />
+```c 
+// joining bools in comparisions
 
-```rs
-ERROR_RULES { 
-    file_read: "Error reading file",
-    data_not_found(string): "Error data not found at {0}",
-}
+if x; > 1 | < 0 { }
 
-run {
-    print(get_data("header")); // implicitly unwraps the error so will PRINT an error if file_text = error, and all std funcs that return something, will return an error.
+// normal bools 
 
-    print(file_text("file.txt").except(handle_missing_file)); // this is to deal manually with the error
-}
-
-fn file_text(filename string): string {
-    return std.file.read(filename);
-}
-
-fn get_data(header string): int {
-    return db.find(header)#data_not_found(header); // to apply error case to a function
-}
-
-
+if x > 10 {}
 ```
+
+## Memory Management
+
+- Mutable values are moved, pointers are only for immutable values (Cloning/copying is possible).
+- All values are freed at the end of their scope.
+- You can create, modify and access global data through maps, and indexes/handles.
 
 ## Standard Library
 
 - Input/output operations  
 - Math and string utilities  
 - File and system tools  
+- Hashmaps
+- FFI
+- Vulkan interface
 
 
 ### Syntax highlighting
