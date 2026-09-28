@@ -86,11 +86,12 @@ loop (bool: on = true) == false {
 }
 ```
 
-## Arrays 
+## Lists 
 ```c
 // not dynamic until v1
 items: (i32)list[9]
 update_len(items, new_len) 
+// since i32 is fixed size, the allocation is automatically modified
 
 
 items: (string)list[9]
