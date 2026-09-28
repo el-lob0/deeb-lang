@@ -1,10 +1,7 @@
 
-# WIP
-(work in progress)
+### (wip)
 
-# HARISSA Programming Language
-
-The spicy programming language.
+# Design
 
 
 ---
