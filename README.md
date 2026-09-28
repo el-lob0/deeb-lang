@@ -123,6 +123,18 @@ type TypeName: struct {
 }
 type TypeName: int
 ```
+<br />
+
+boolean operations <br />
+```c 
+// joining bools in comparisions
+
+if x; > 1 | < 0 { }
+
+// normal bools 
+
+if x > 10 {}
+```
 
 errors <br />
 ```c 
@@ -144,15 +156,14 @@ fn one_plus_one(): int, error_domain_name {
 ```
 <br />
 
-boolean operations <br />
+markers (idea only) <br />
 ```c 
-// joining bools in comparisions
+@debug "message {some_variable_name}" 
+// stops the code at this point and prints (only usable in run {} block)
 
-if x; > 1 | < 0 { }
-
-// normal bools 
-
-if x > 10 {}
+@log Name "value ?"
+// a value assigned to an identifier that can be declared anywhere and can be called inside the run {}
+// mayhaps for printing or showing code related data, during debug builds ... ?
 ```
 
 ## Memory Management
