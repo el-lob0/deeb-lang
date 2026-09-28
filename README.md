@@ -113,22 +113,34 @@ id // index
 ```
 <br />
 
-errors and return types <br />
-```c 
-// to define a constant (something like a global enum) that can be returned from any functions
-
-#return_type FileIO_Error
-
-fn write_file(): () {
+Aliasing:
+```c
+type TypeName: enum {
     // ...
-    if !error {
-        return
-    } else {
-        return FileIO_Error
-    }
 }
-// ps. all the return types are like a single big enum that belongs to the entire package or file (tbd)
+type TypeName: struct {
+    // ...
+}
+type TypeName: int
+```
 
+errors <br />
+```c 
+// to replace magic numbers with human readable and easily send error messages
+
+type error_domain_name: Error {
+    FileError(msg),
+    InputError(msg),
+    // etc... 
+    // Enum values start at 1
+    // explicitly return None if no error, and None = 0
+}
+
+// use in a function 
+
+fn one_plus_one(): int, error_domain_name {
+    return 1+1, FileError("pythagore said nah")
+}
 ```
 <br />
 
