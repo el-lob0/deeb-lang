@@ -13,22 +13,21 @@ And comments*
 ## Generic types
 
 ```
-u32 u64
-i32 i64
-f32 f64
+uint(size)
+int(size)
+float(size)
 
 string
-mlstring (multi-line string)
-
-id (index)
+char
+bool
 ```
 
 * Variables:
 ```c
-num: u32 // declaration
-num: u32: 5 // const declaration
-num: u32 = 10 // mutable declaration
-num = 1 // assign
+num: uint(8) // declaration
+num: uint(8): 5 // const declaration
+num: uint(8) = 10 // mutable declaration
+num = 1 // assign (impossible on undeclared)
 
 ```
 
@@ -77,13 +76,25 @@ fn func_name(param: type): return_type {
 
 ```c
 
-loop (i32: i = 0) < n {
+loop (int(8): i = 0) < n {
 
 }
 
 loop (bool: on = true) == false {
 
 }
+```
+
+
+
+# Not yet designed
+
+## Memory
+
+```c
+variable: type = value @(expression)
+realloc(variable, newsize_expression)
+// expression that equals the size
 ```
 
 ## Arrays 
