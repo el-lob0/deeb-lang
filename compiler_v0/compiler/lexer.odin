@@ -150,40 +150,52 @@ tokenize :: proc(field: string, string_state: StringState) -> (Token, string, in
     return token, field, 0
 }
 
+// or pass a reference to the actual arrays and directly append (better)
+// returns token array, value array, bool (whether field was tokenized or not)
+tokenize_field :: proc(field: string, tokens: ^[dynamic]Token, values: ^[dynamic]string) -> bool {
+    append_elem(tokens, Token.DoubleQuoteOpen)
+    append_elem(values, field)
+
+    return false
+}
+
+
 // NOTE: gotta add escaping bytes to strings
 
-file_to_tokens :: proc(filepath: string) -> (Lexer, int, string) {
+file_to_tokens :: proc(filepath: string) -> ([dynamic]Token, [dynamic]string, int, string) {
     file, error := os.read_entire_file_from_filename(filepath)
     defer delete(file, context.allocator)
 
     fields := strings.fields(string(file))
 
-    lexer := Lexer {} 
-
+    tokens : [dynamic]Token
+    values : [dynamic]string
     string_state := StringState.Outside
 
     for field in fields {
         
+        tokenize_field(field, &tokens, &values)
+        
         if field == "\"" && string_state == StringState.Outside {
             string_state = StringState.Inside
-            append_elem(&lexer.token, Token.DoubleQuoteOpen)
-            append_elem(&lexer.value, field)
+            append_elem(&tokens, Token.DoubleQuoteOpen)
+            append_elem(&values, field)
             continue
         } else if field == "\"" && string_state == StringState.Inside {
             string_state = StringState.Inside
-            append_elem(&lexer.token, Token.DoubleQuoteOpen)
-            append_elem(&lexer.value, field)
+            append_elem(&tokens, Token.DoubleQuoteOpen)
+            append_elem(&values, field)
             continue
         }
 
         token, value, result := tokenize(field, string_state)
         
         if result == 1 {
-          return lexer, 1, value
+          return tokens, values, 1, value
         }
-        append_elem(&lexer.token, token)
-        append_elem(&lexer.value, value)
+        append_elem(&tokens, token)
+        append_elem(&values, value)
     }
 
-    return lexer, 0, fmt.tprintf("Tokenized file: %s", filepath)
+    return tokens, values, 0, fmt.tprintf("Tokenized file: %s", filepath)
 }
