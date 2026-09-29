@@ -1,0 +1,13 @@
+package v0compiler
+
+
+
+Error :: enum {
+    None,
+    ExpectedClosingSingleQuote,
+    ExpectedClosingDoubleQuote,
+    
+}
+
+
+

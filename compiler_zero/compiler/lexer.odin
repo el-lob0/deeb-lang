@@ -5,16 +5,18 @@ import "core:fmt"
 import "core:strings"
 
 
-// TODO: seperate non string fields into multiple fields if it contains multiple tokens (i.e. `y=x+a`, 5 different tokens without whitespaces)
-// TODO: tokenize standalone operators/brackets
 
 Token :: enum {
     CurlyBracketOpen,
     CurlyBracketClose,
+    SquareBracketOpen,
+    SquareBracketClose,
     ParenthesisOpen,
     ParenthesisClose,
     DoubleQuoteOpen,
     DoubleQuoteClose,
+    SingleQuoteOpen,
+    SingleQuoteClose,
     Identifier,
     KeywordIf,
     KeywordElse,
@@ -31,15 +33,18 @@ Token :: enum {
     // require explicit sizes: `int(64)` 
     Number,
     String,
+    Char,
     PlusOp,
     MinusOp,
     MultOp,
     DivOp,
+    ModuloOp,
     AssignOp,
     EqualComparisonOp,
     NotEqualComparisonOp,
     OR_ComparisonOp,
     AND_ComparisonOp,
+    NotPrefix,
 
     ReferenceOp,
     None,
@@ -150,31 +155,158 @@ tokenize :: proc(field: string, string_state: StringState) -> (Token, string, in
     return token, field, 0
 }
 
-// or pass a reference to the actual arrays and directly append (better)
-// returns token array, value array, bool (whether field was tokenized or not)
-tokenize_field :: proc(field: string, tokens: ^[dynamic]Token, values: ^[dynamic]string) -> bool {
-    append_elem(tokens, Token.DoubleQuoteOpen)
-    append_elem(values, field)
+// NOTE: make a function that runs char by char; when outside a string, insert a whitespace if needed
+    // -> aka around operators, and delimiters
+    // i.e. 
+    // a+b -> a + b
+    // x :int(8)=6 -> x : int ( 8 ) = 6
 
-    return false
+
+
+test :: proc (tokens: ^[dynamic]Token, values: ^[dynamic]string, file: string) -> (Error) {
+    // switch on every char, accumulate into a string 
+    // checks order: 
+    // check for string or char delimiters
+    // if inside string, or char, append until closing delimiter is met
+    // if not: -> symbol -> double symbol -> keyword -> number
+    // when its a whitespace without issues append token and continue
+
+    buffer : [dynamic]u8
+
+    in_single_quote := false
+    char_count := 0
+    in_double_quote := false
+
+    escape := false
+
+    for char in file {
+
+        
+        // ----------------------- CHAR AND STRING ---------------------
+        if in_single_quote {
+            char_count += 1
+        }
+        if char_count > 2 {
+            return Error.ExpectedClosingSingleQuote
+        }
+
+        if in_double_quote {
+            append_elem(&buffer, u8(char))
+            continue
+        }
+        if in_single_quote && char != '\'' {
+            append_elem(tokens, Token.Char)
+            append_elem(values, fmt.tprintf("%c", char))
+            continue
+        }
+
+
+        switch char {
+        case '"': {
+            if in_double_quote && !in_single_quote && char == '"' {
+
+                append_elem(tokens, Token.DoubleQuoteClose)
+                append_elem(values, "")
+
+                append_elem(tokens, Token.String)
+                append_elem(values, string(buffer[:]))
+
+                in_double_quote = false
+            }
+            if !in_double_quote && !in_single_quote {
+ 
+               append_elem(tokens, Token.DoubleQuoteOpen)
+               append_elem(values, "")
+
+               in_double_quote = true
+            }
+        }
+        case '\'': {
+            if !in_single_quote {
+                in_single_quote = true
+                append_elem(tokens, Token.SingleQuoteOpen)
+                append_elem(values, "")
+            }
+            if in_single_quote {
+                char_count = 0
+                append_elem(tokens, Token.SingleQuoteClose)
+                append_elem(values, "")
+            }
+        }
+        // ------------------------ END CHAR AND STRING -------------------
+        
+
+
+
+
+
+        }
+    }
+
+
+    return Error.None
 }
 
+
+whitespace_around_symbols :: proc(file: []u8) -> ([dynamic]u8, int) {
+    
+    new_string: [dynamic]u8
+    string_state := StringState.Outside
+
+    symbol_started := false
+    for char in file {
+        is_symbol := char == '&' || char == '|' || char == '!' || char == '*' || char == '+' || char == '-' || char == '/' || char == '%' 
+        
+        if string_state == StringState.Inside && char != '"' {
+            append_elem(&new_string, char)
+            continue
+        } else if string_state == StringState.Inside && char == '"' {
+            append_elem(&new_string, char)
+            string_state = StringState.Outside
+        } else if string_state == StringState.Outside && char == '"' {
+            append_elem(&new_string, char)
+        }
+
+        if symbol_started && is_symbol {
+            append_elem(&new_string, char)
+
+        } else if symbol_started && !is_symbol {
+            append_elem(&new_string, ' ')
+            symbol_started = false 
+
+        } else if !symbol_started && is_symbol {
+            append_elem(&new_string, ' ')
+            append_elem(&new_string, char)
+            symbol_started = true
+        }
+
+    }
+
+
+    return new_string, 0
+}
 
 // NOTE: gotta add escaping bytes to strings
 
 file_to_tokens :: proc(filepath: string) -> ([dynamic]Token, [dynamic]string, int, string) {
-    file, error := os.read_entire_file_from_filename(filepath)
-    defer delete(file, context.allocator)
+    tokens : [dynamic]Token
+    values : [dynamic]string
+ 
+    raw_file, read_error := os.read_entire_file_from_filename(filepath)
+    if read_error {       
+        return tokens, values, 1, fmt.tprintf("Error reading file: %s", filepath)
+    }
+
+    file, process_error := whitespace_around_symbols(raw_file)
+    
+    delete(raw_file, context.allocator)
 
     fields := strings.fields(string(file))
 
-    tokens : [dynamic]Token
-    values : [dynamic]string
     string_state := StringState.Outside
 
     for field in fields {
-        
-        tokenize_field(field, &tokens, &values)
+
         
         if field == "\"" && string_state == StringState.Outside {
             string_state = StringState.Inside
@@ -187,7 +319,7 @@ file_to_tokens :: proc(filepath: string) -> ([dynamic]Token, [dynamic]string, in
             append_elem(&values, field)
             continue
         }
-
+        
         token, value, result := tokenize(field, string_state)
         
         if result == 1 {
