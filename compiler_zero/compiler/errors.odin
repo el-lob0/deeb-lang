@@ -6,6 +6,7 @@ Error :: enum {
     None,
     ExpectedClosingSingleQuote,
     ExpectedClosingDoubleQuote,
+    UnexpectedToken,
     
 }
 

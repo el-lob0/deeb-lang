@@ -1,0 +1,7 @@
+// comment
+
+run {
+    loop (i32: i = 0) < n {
+        a= i+b
+    }
+}

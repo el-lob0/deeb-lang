@@ -15,6 +15,8 @@ Token :: enum {
     ParenthesisClose,
     DoubleQuoteOpen,
     DoubleQuoteClose,
+    TildeOpen,
+    TildeClose,
     SingleQuoteOpen,
     SingleQuoteClose,
     Identifier,
@@ -24,13 +26,20 @@ Token :: enum {
     KeywordLoop,
     KeywordArray,
     KeywordFn,
-    KeywordEnum,
-    KeywordStruct,
-    // these 
-    TypeInt,
-    TypeUnsigned,
-    TypeFloat,
-    // require explicit sizes: `int(64)` 
+    KeywordType,
+    // types
+    TypeStruct,
+    TypeEnum,
+    TypeInt_8,
+    TypeInt_32,
+    TypeInt_64,
+    TypeUnsigned_8,
+    TypeUnsigned_32,
+    TypeUnsigned_64,
+    TypeFloat_8,
+    TypeFloat_32,
+    TypeFloat_64,
+    // ----------- 
     Number,
     String,
     Char,
@@ -41,23 +50,29 @@ Token :: enum {
     ModuloOp,
     AssignOp,
     EqualComparisonOp,
+    EqualOrLess,
+    EqualOrMore,
+    LessThan,
+    MoreThan,
     NotEqualComparisonOp,
     OR_ComparisonOp,
     AND_ComparisonOp,
     NotPrefix,
-
+    Newline,
+    Dot,
+    Comma,
+    SemiColon,
+    Colon,
+    Hashtag,
+    Tag,
     ReferenceOp,
+    EOF,
     None,
 }
 
 StringState :: enum {
   Inside,
   Outside
-}
-
-Lexer :: struct {
-    token: [dynamic]Token,
-    value: [dynamic]string,
 }
 
 is_numerical :: proc(str: string) -> bool {
@@ -71,80 +86,50 @@ is_numerical :: proc(str: string) -> bool {
     return is_numerical
 }
 
-is_type_with_size :: proc (field: string) -> (Token, string, bool) {
+// any character that can't be in a type, keyword, or identifier returns false
+interruption_met :: proc(char: rune) -> bool {
+    is_literal := false
 
-    index := 0 
-
-    first_slice: [dynamic]u8
-    for i in field {
-        if i == '(' {
-            break
-        }
-        append_elem(&first_slice, u8(i))
-        index += 1
+    if !((char >= 'a' && char <= 'z') || 
+      (char >= 'A' && char <= 'Z') || 
+      (char >= '0' && char <= '9') || 
+      char == '_') {
+        is_literal = true
     }
- 
-    second_slice: [dynamic]u8
-    for i := index; i<len(field); i+=1 {
-        if field[i] == '(' {
-            continue
-        }
-        if field[i] == ')' {
-            break
-        }
-        append_elem(&second_slice, field[i])
+    
+    return is_literal   
+}
 
-        // need to check for a closing bracket
-        if i == len(field)-1 {
-            if field[i] != ')' {
-                return Token.None, "", false
-            }
-        }
-    }
+tokenize_word :: proc(word: string) -> (Token, string) {
 
-    if !is_numerical(string(second_slice[:])) {
-        return Token.None, "", false
-    }
+      switch word {
+  
+      case "run": return Token.KeywordRun, ""
+      case "loop": return Token.KeywordLoop, ""
+      case "if": return Token.KeywordIf, ""
+      case "else": return Token.KeywordElse, ""
+      case "array": return Token.KeywordArray, ""
+      case "fn": return Token.KeywordFn, ""
+      case "type": return Token.KeywordType, ""
 
-    switch string(first_slice[:]) {
-    case "int": return Token.TypeInt, string(second_slice[:]), true 
-    case "uint": return Token.TypeUnsigned, string(second_slice[:]), true
-    case "float": return Token.TypeFloat, string(second_slice[:]), true 
-    case: return Token.None, "", false
-    }
-} 
-
-
-is_keyword :: proc(field: string) -> (Token, string, int) {
-    is_keyword := field == "run" || field == "loop" || field == "if" || field == "else" || field == "array" || field == "fn" || field == "enum" || field == "struct" 
-    if is_keyword {
-        switch field {
-        case "run": return Token.KeywordRun, "", 0
-        case "loop": return Token.KeywordLoop, "", 0
-        case "if": return Token.KeywordIf, "", 0
-        case "else": return Token.KeywordElse, "", 0
-        case "array": return Token.KeywordArray, "", 0
-        case "fn": return Token.KeywordFn, "", 0
-        case "enum": return Token.KeywordEnum, "", 0
-        case "struct": return Token.KeywordStruct, "", 0
-        // case: return Token.Number, "Impossible", 1
-        }
-    }
+      case "i8": return Token.TypeInt_8, ""
+      case "i32": return Token.TypeInt_32, ""
+      case "i64": return Token.TypeInt_64, ""
+      case "u8": return Token.TypeUnsigned_8, ""
+      case "f8": return Token.TypeUnsigned_32, ""
+      case "u32": return Token.TypeUnsigned_64, ""
+      case "u64": return Token.TypeFloat_8, ""
+      case "f32": return Token.TypeFloat_32, ""
+      case "f64": return Token.TypeFloat_64, ""
+      }
 
     token := Token.Identifier
 
-    return token, field, 0
+    return token, word
 }
 
 
 tokenize :: proc (tokens: ^[dynamic]Token, values: ^[dynamic]string, file: string) -> (Error) {
-    // switch on every char, accumulate into a string 
-    // checks order: 
-    // check for string or char delimiters
-    // if inside string, or char, append until closing delimiter is met
-    // if not: -> symbol -> double symbol -> keyword -> number
-    // when its a whitespace without issues append token and continue
-
     buffer : [dynamic]u8
 
     in_single_quote := false
@@ -152,13 +137,49 @@ tokenize :: proc (tokens: ^[dynamic]Token, values: ^[dynamic]string, file: strin
     in_double_quote := false
 
     escape := false
+    comment := false
+    multi_string := false
+    previous_byte: rune = ' '
 
     for char in file {
 
-        
+      
+        // WARN: Later, maybe next compiler, i'd like to implement maybe comments 
+        // that are kept for logging purposes (with special syntax etc)
+        if comment {
+            previous_byte = char
+            continue
+        }
+
+        if escape {
+            escape = false
+            switch char {
+            case 'n': {
+                if comment { comment = false }
+                else {
+                    append_elem(tokens, Token.Newline)
+                    append_elem(values, "")
+                }
+            }
+            }
+        }
+
+        // TODO: check for an invalid 2 byte succession (like | and then whitespace)
+
+        //----------------------------
+
+        if interruption_met(char) {
+            token, value := tokenize_word(string(buffer[:]))
+            append_elem(tokens, token)
+            append_elem(values, value)
+            clear(&buffer)
+        }
+
         // ----------------------- CHAR AND STRING ---------------------
+
         if in_single_quote {
             char_count += 1
+            // escape char check and logic
         }
         if char_count > 2 {
             return Error.ExpectedClosingSingleQuote
@@ -166,14 +187,39 @@ tokenize :: proc (tokens: ^[dynamic]Token, values: ^[dynamic]string, file: strin
 
         if in_double_quote {
             append_elem(&buffer, u8(char))
+            previous_byte = char
             continue
         }
         if in_single_quote && char != '\'' {
             append_elem(tokens, Token.Char)
             append_elem(values, fmt.tprintf("%c", char))
+            previous_byte = char
             continue
         }
 
+        // ------------------- pre switch checks --------------
+
+        if previous_byte == '=' && char != '=' {
+            append_elem(tokens, Token.AssignOp)
+            append_elem(values, "")
+        }
+
+        if previous_byte == '/' && char != '/' {
+            append_elem(tokens, Token.DivOp)
+            append_elem(values, "")
+        }
+
+        if previous_byte == '!' && char != '=' {
+            append_elem(tokens, Token.NotPrefix)
+            append_elem(values, "")
+        }
+
+        if previous_byte == '&' && char != '&' {
+            append_elem(tokens, Token.ReferenceOp)
+            append_elem(values, "")
+        }
+
+        // -------------------- end checks -----------------
 
         switch char {
         case '"': {
@@ -203,18 +249,168 @@ tokenize :: proc (tokens: ^[dynamic]Token, values: ^[dynamic]string, file: strin
             }
             if in_single_quote {
                 char_count = 0
+
                 append_elem(tokens, Token.SingleQuoteClose)
                 append_elem(values, "")
             }
         }
         // ------------------------ END CHAR AND STRING -------------------
-        
 
+        // ------------------------ MATH OPERATORS ------------------------
+        case '+': {
+            append_elem(tokens, Token.PlusOp)
+            append_elem(values, "")
+        }
+        case '-': {
+            append_elem(tokens, Token.MinusOp)
+            append_elem(values, "")
+        }
+        case '*': {
+            append_elem(tokens, Token.MultOp)
+            append_elem(values, "")
+        }
+        case '/': {
+            if previous_byte == '/' {
+                comment = true
+            } // else: skip; resolved in next iteration
+        }
+        case '%': {
+            append_elem(tokens, Token.ModuloOp)
+            append_elem(values, "")
+        }
+
+        // -----------------------  BOOL OPERATORS (+assign) ---------------- 
+        case '|': {
+            if previous_byte == '|' {
+                append_elem(tokens, Token.OR_ComparisonOp)
+                append_elem(values, "")
+            } // else do nothing, lone | is invalid
+        }
+        case '&': {
+            if previous_byte == '&' {
+                append_elem(tokens, Token.AND_ComparisonOp)
+                append_elem(values, "")
+            } // else do nothing, lone & is a reference
+        }
+        case '=': {
+            if previous_byte == '=' {
+                append_elem(tokens, Token.EqualComparisonOp)
+                append_elem(values, "")
+            } else if previous_byte == '>' {
+                append_elem(tokens, Token.EqualOrMore)
+                append_elem(values, "")
+            } else if previous_byte == '<' {
+                append_elem(tokens, Token.EqualOrLess)
+                append_elem(values, "")
+            } else if previous_byte == '!' {
+                append_elem(tokens, Token.NotEqualComparisonOp)
+                append_elem(values, "")
+            }
+            // else is handled later when next byte is confirmed not to be equal
+        }
+        case '>': {
+            if previous_byte == '=' {
+                append_elem(tokens, Token.EqualOrMore)
+                append_elem(values, "")
+            } else {
+                append_elem(tokens, Token.MoreThan)
+                append_elem(values, "")
+            }
+        }
+        case '<': {
+            if previous_byte == '=' {
+                append_elem(tokens, Token.EqualOrLess)
+                append_elem(values, "")
+            } else {
+                append_elem(tokens, Token.LessThan)
+                append_elem(values, "")
+            }
+        }
+        case '!': {} // handled in = case and in pre switch checks
+
+        // -------------------------- DELIMITERS -----------------------------
+        case '{': {
+            append_elem(tokens, Token.CurlyBracketOpen)
+            append_elem(values, "")
+        }
+        case '}': {
+            append_elem(tokens, Token.CurlyBracketOpen)
+            append_elem(values, "")
+        }
+        case '(': {
+            append_elem(tokens, Token.ParenthesisOpen)
+            append_elem(values, "")
+        }
+        case ')': {
+            append_elem(tokens, Token.ParenthesisClose)
+            append_elem(values, "")
+        }
+        case '[': {
+            append_elem(tokens, Token.SquareBracketOpen)
+            append_elem(values, "")
+        }
+        case ']': {
+            append_elem(tokens, Token.SquareBracketClose)
+            append_elem(values, "")
+        }
+        case ':': {
+            append_elem(tokens, Token.Colon)
+            append_elem(values, "")
+        }
+        case '.': {
+            append_elem(tokens, Token.Dot)
+            append_elem(values, "")
+        }
+        case ',': {
+            append_elem(tokens, Token.Comma)
+            append_elem(values, "")
+        }
+        case ';': {
+            append_elem(tokens, Token.SemiColon)
+            append_elem(values, "")
+        }
+        case '`': {
+            if multi_string {
+                append_elem(tokens, Token.TildeClose)
+                append_elem(values, "")
+                multi_string := false
+            } else {
+                append_elem(tokens, Token.TildeOpen)
+                append_elem(values, "")
+                multi_string := true
+            }
+        }
+
+        // ----------------------- SPECIAL CHARS ----------------------------------
+        // whitespace, where i resolve the buffer if it contains something
+        case ' ': {}
+        // escapes
+        case '\\': {
+            escape = true
+        }
+        case '@': {
+            append_elem(tokens, Token.Tag)
+            append_elem(values, "")
+        }
+        case '#': {
+            append_elem(tokens, Token.Hashtag)
+            append_elem(values, "")
+        }
+
+        // ------------- CHARS THAT AREN'T PART OF THE SYNTAX (YET) ---------------------
+        // return unexpected token error
+        case '?': {}
+        case '^': {}
+        case '~': {}
+
+        // ------------------ LETTERS AND NUMBERS ---------------------------------------
+        case: {}
 
 
 
 
         }
+        previous_byte = char
     }
 
 
