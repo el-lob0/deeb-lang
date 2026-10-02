@@ -152,8 +152,10 @@ tokenize_word :: proc(word: string) -> (Token, string) {
 }
 
 
-tokenize :: proc (tokens: ^[dynamic]Token, values: ^[dynamic]string, file: string) -> (Error) {
+tokenize :: proc (tokens: ^[dynamic]Token, values: ^[dynamic]string, file: string) -> (Error, int) {
     buffer : [dynamic]u8
+
+    line := 1
 
     in_single_quote := false
     char_count := 0
@@ -198,10 +200,13 @@ tokenize :: proc (tokens: ^[dynamic]Token, values: ^[dynamic]string, file: strin
             // escape char check and logic
         }
         if char_count > 2 {
-            return Error.ExpectedClosingSingleQuote
+            return Error.ExpectedClosingSingleQuote, line 
         }
 
         if in_double_quote {
+            if char == '\n' {
+                return Error.ExpectedClosingDoubleQuote, line
+            }
             append_elem(&buffer, u8(char))
             previous_byte = char
             continue
@@ -410,6 +415,7 @@ tokenize :: proc (tokens: ^[dynamic]Token, values: ^[dynamic]string, file: strin
             if char == '\n' {
                 append_elem(tokens, Token.Newline)
                 append_elem(values, "")
+                line += 1
             }
         }
         // escapes
@@ -427,9 +433,15 @@ tokenize :: proc (tokens: ^[dynamic]Token, values: ^[dynamic]string, file: strin
 
         // ------------- CHARS THAT AREN'T PART OF THE SYNTAX (YET) ---------------------
         // return unexpected token error
-        case '?': {}
-        case '^': {}
-        case '~': {}
+        case '?': { 
+            return Error.UnexpectedToken, line
+        }
+        case '^': { 
+            return Error.UnexpectedToken, line
+        }
+        case '~': { 
+            return Error.UnexpectedToken, line
+        }
 
         // ------------------ LETTERS AND NUMBERS ---------------------------------------
         case: {
@@ -441,19 +453,26 @@ tokenize :: proc (tokens: ^[dynamic]Token, values: ^[dynamic]string, file: strin
     }
 
 
-    return Error.None
+    return Error.None, line
 }
 
 
 
-file_to_tokens :: proc(filepath: string) -> ([dynamic]Token, [dynamic]string, int, string) {
+file_to_tokens :: proc(filepath: string) -> ([dynamic]Token, [dynamic]string, Error, string) {
     tokens : [dynamic]Token
     values : [dynamic]string
  
     raw_file, read_error := os.read_entire_file_from_filename(filepath)
     
-    err := tokenize(&tokens, &values, string(raw_file))
+    err, err_line := tokenize(&tokens, &values, string(raw_file))
     defer delete(raw_file, context.allocator)
 
-    return tokens, values, 0, fmt.tprintf("Tokenized file: %s", filepath)
+
+    if err != Error.None {
+        clear(&tokens)
+        clear(&values)
+        return tokens, values, err, fmt.tprintf("at line number %d", err_line)
+    } 
+
+    return tokens, values, Error.None, fmt.tprintf("Tokenized file: %s", filepath)
 }
