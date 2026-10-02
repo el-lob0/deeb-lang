@@ -2,6 +2,7 @@ package v0compiler
 
 import "core:os"
 import "core:fmt"
+import "core:strconv"
 import "core:strings"
 
 
@@ -93,7 +94,7 @@ interruption_met :: proc(char: rune) -> bool {
     if !((char >= 'a' && char <= 'z') || 
       (char >= 'A' && char <= 'Z') || 
       (char >= '0' && char <= '9') || 
-      char == '_') {
+      char == '_' || char == ' ') {
         is_literal = true
     }
     
@@ -101,6 +102,24 @@ interruption_met :: proc(char: rune) -> bool {
 }
 
 tokenize_word :: proc(word: string) -> (Token, string) {
+
+      is_key := word =="run" || word == "loop" || word == "if" || word =="else" || word == "array" || word == "fn" || 
+                          word == "type"
+
+      is_type := word =="i8" || word == "u8" || word == "f8" || word =="i32" || word == "u32" || word == "f32" || 
+                          word == "i64" || word == "u64" || word == "f64" ||
+                          word == "string" || word == "char" || 
+                          word == "struct" || word == "enum"
+
+      if is_numerical(word) {
+          return Token.Number, word
+      }
+
+      token := Token.Identifier
+      if !is_key && !is_type {
+          return token, word         
+      }
+
 
       switch word {
   
@@ -121,11 +140,15 @@ tokenize_word :: proc(word: string) -> (Token, string) {
       case "u64": return Token.TypeFloat_8, ""
       case "f32": return Token.TypeFloat_32, ""
       case "f64": return Token.TypeFloat_64, ""
+      case "string": return Token.String, ""
+      case "char": return Token.Char, ""
+      case "struct": return Token.TypeStruct, ""
+      case "enum": return Token.TypeEnum, ""
       }
 
-    token := Token.Identifier
 
-    return token, word
+      return token, word // obsolete but ye         
+
 }
 
 
@@ -147,29 +170,22 @@ tokenize :: proc (tokens: ^[dynamic]Token, values: ^[dynamic]string, file: strin
         // WARN: Later, maybe next compiler, i'd like to implement maybe comments 
         // that are kept for logging purposes (with special syntax etc)
         if comment {
-            previous_byte = char
-            continue
+            if char == '\n' {
+                comment = false
+            } else {
+                previous_byte = char
+                continue
+            }
         }
 
-        if escape {
-            escape = false
-            switch char {
-            case 'n': {
-                if comment { comment = false }
-                else {
-                    append_elem(tokens, Token.Newline)
-                    append_elem(values, "")
-                }
-            }
-            }
-        }
 
         // TODO: check for an invalid 2 byte succession (like | and then whitespace)
 
         //----------------------------
 
-        if interruption_met(char) {
-            token, value := tokenize_word(string(buffer[:]))
+        if interruption_met(char) && len(buffer) > 0 {
+            word, err := strings.clone(string(buffer[:]))
+            token, value := tokenize_word(word)
             append_elem(tokens, token)
             append_elem(values, value)
             clear(&buffer)
@@ -334,7 +350,7 @@ tokenize :: proc (tokens: ^[dynamic]Token, values: ^[dynamic]string, file: strin
             append_elem(values, "")
         }
         case '}': {
-            append_elem(tokens, Token.CurlyBracketOpen)
+            append_elem(tokens, Token.CurlyBracketClose)
             append_elem(values, "")
         }
         case '(': {
@@ -383,7 +399,19 @@ tokenize :: proc (tokens: ^[dynamic]Token, values: ^[dynamic]string, file: strin
 
         // ----------------------- SPECIAL CHARS ----------------------------------
         // whitespace, where i resolve the buffer if it contains something
-        case ' ': {}
+        case ' ', '\n', '\r', '\t': {
+            if len(buffer) > 0 {
+                word, err := strings.clone(string(buffer[:]))
+                token, value := tokenize_word(word)
+                append_elem(tokens, token)
+                append_elem(values, value)
+                clear(&buffer)
+            }
+            if char == '\n' {
+                append_elem(tokens, Token.Newline)
+                append_elem(values, "")
+            }
+        }
         // escapes
         case '\\': {
             escape = true
@@ -404,13 +432,12 @@ tokenize :: proc (tokens: ^[dynamic]Token, values: ^[dynamic]string, file: strin
         case '~': {}
 
         // ------------------ LETTERS AND NUMBERS ---------------------------------------
-        case: {}
-
-
-
-
+        case: {
+            append_elem(&buffer, u8(char))
+        }
         }
         previous_byte = char
+
     }
 
 
@@ -424,10 +451,7 @@ file_to_tokens :: proc(filepath: string) -> ([dynamic]Token, [dynamic]string, in
     values : [dynamic]string
  
     raw_file, read_error := os.read_entire_file_from_filename(filepath)
-    if read_error {       
-        return tokens, values, 1, fmt.tprintf("Error reading file: %s", filepath)
-    }
-
+    
     err := tokenize(&tokens, &values, string(raw_file))
     defer delete(raw_file, context.allocator)
 

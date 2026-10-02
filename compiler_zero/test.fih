@@ -1,7 +1,6 @@
-// comment
 
 run {
-    loop (i32: i = 0) < n {
-        a= i+b
+    loop (i32: index = 0) < max {
+        a_number = index+something
     }
 }
